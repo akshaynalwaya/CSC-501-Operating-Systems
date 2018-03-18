@@ -1,0 +1,62 @@
+CSC501
+PA1: PROCESS SCHEDULING
+
+Ques 1. What are the advantages and disadvantages of each of the two scheduling policies? Also, give the advantages and disadvantages of the round robin scheduling policy originally implemented in Xinu.
+Ans. 
+1. EXPONENTIAL DISTRIBUTION SCHEDULER:
+
+Advantages -
+* It uses the concept of randomization, which is light to implement and ensures all the processes have equal chance of getting scheduled.
+
+* The processes having priority around the value of lambda are more probable to get scheduled. Hence, it's a random scheduler where we have some control over a range of priority values which should be preferred.
+
+* This scheduler solves the problem of starvation among processes by employing randomization.
+
+Disadvantages -
+* Lambda should be chosen appropriately for this scheduler to work well; choosing extreme values can result in unfair scheduling.
+
+* If a I/O process has lower priority then it might have to wait for a long time before getting scheduled or might not get fair share of CPU time.
+
+
+2. LINUX-LIKE SCHEDULER:
+
+Advantages -
+* Processes are not prioritized based on a random value, but rather on priority which ensures preference of higher priority processes before lower ones.
+
+* Ensures fairness among processes; for e.g., I/O bound processes which have not used up their counter value are also given a fair chance.
+
+* It approximates multilevel scheduling in the sense that a process with high value of priority will be preferred over the one with low priority and also, goodness value will be high which ensures it will be among top priority processes in next cycle of scheduling.
+
+Disadvantages -
+* It's heavy algorithm with more number of calculations as compared to exponential distribution scheduler and hence the scheduling time is more.
+
+
+3. ROUND ROBIN SCHEDULER OF XINU:
+
+Advantages -
+* It's a faster scheduling algorithm as there are no calculations involved and just priorities have to be compared.
+
+* If there are many high priority processes, all get equal time.
+
+* If compared with non-preemptive schedulers, it has better average response time.
+
+Disadvantages -
+* Processes with low priority might have to wait for a long time before they are allocated a processor.
+
+* Performance of this type of scheduling algorithm highly depends on the value of time interval chosen. If this value is too low then cost of context switch might increase and result in slower execution.
+
+
+Ques 2. Describe the way each of the schedulers affects the NULL process.
+Ans.
+EXPONENTIAL DISTRIBUTION SCHEDULER: NULL processes are scheduled if and only if the ready queue is empty.
+
+LINUX-LIKE SCHEDULER: The goodness value will be 0 for NULL processes and hence they wouldn't be scheduled.
+
+ROUND-ROBIN SCHEDULER OF XINU: NULL processes are not scheduled.
+
+
+
+
+
+			-------xxx-------
+					
