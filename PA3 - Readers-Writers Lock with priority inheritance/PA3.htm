@@ -1,0 +1,418 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+
+<title>PA3</title>
+</head>
+
+<body>
+<div align="center">
+<div style="width: 880px;" align="left">
+<h2 align="center">CSC501 Fall 2017</h2>
+<h2 align="center">PA3: Readers/Writer Locks with Priority Inheritance</h2>
+<h2 align="center">Due: December 1 2017, 11:55 PM</h2>
+
+
+<h3>1. Introduction </h3>
+<h3>
+<p class="MsoNormal" style="font-weight: normal;"> In PA3, you are
+going to implement readers/writer locks as described in this handout.
+Additionally, you will implement a priority inheritance mechanism to
+prevent the priority inversion problem when using locks. Please <span class="SpellE">download and untar</span> a fresh version of the XINU
+source at (<a href="https://people.engr.ncsu.edu/gjin2/Classes/501/Fall2017/assignments/PA3/csc501-lab3.tgz">csc501-lab3.tgz</a>).</p>
+<p class="style1" style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> Readers/writer locks are used to
+synchronize access to a shared data structure. A lock can be acquired
+for read or write operations. A lock acquired for reading can be shared
+by other readers, but a lock acquired for writing must be exclusive. </p>
+<p style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> You have been provided with the
+standard semaphore implementation for XINU. Make sure you read and
+understand the XINU semaphore system (<font size="2"><span class="SpellE" style="font-family: Courier New;">wait.c</span><span style="font-family: Courier New;">, </span><span class="SpellE" style="font-family: Courier New;">signal.c</span><span style="font-family: Courier New;">, </span><span class="SpellE" style="font-family: Courier New;">screate.c</span><span style="font-family: Courier New;">, </span><span class="SpellE" style="font-family: Courier New;">sdelete.c</span></font>, etc.) and
+use that as a basis for your locks. You should NOT modify the standard
+semaphore implementation, since semaphores are used in the rest of the
+kernel, e.g., in device drivers. Your task is to extend the XINU
+semaphore to implement the readers/writer lock semantics. Although, the
+standard semaphores implemented in XINU are quite useful, there are
+some issues with the XINU semaphores which we will try to fix in this
+assignment. </p>
+<p style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> XINU semaphores do not distinguish
+between read accesses, which can co-exist, and write accesses, which
+must be exclusive. </p>
+<p style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> Another problem with <span class="SpellE">XINU's</span> semaphores occurs when a semaphore is
+deleted at a time when it has processes waiting in its queue. In such 
+situation, <span class="SpellE"><i>sdelete</i></span> awakens all the
+waiting processes by moving them from the semaphore queue to the ready
+list. As a result, a process that is waiting for some event to occur
+will be awakened, even though the event has not yet occurred. You need
+to fix this problem in this PA. </p>
+<p style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> Yet another problem that occurs due to
+the interactions between process synchronization and process scheduling
+is priority inversion. Priority inversion occurs when a higher priority
+thread is blocked waiting on a lock (or a semaphore) held by a lower
+priority thread. This can lead to erroneous system behavior, especially
+in real time systems. </p>
+<p style="font-weight: normal;">&nbsp; </p>
+<p class="MsoNormal" style="font-weight: normal;"> There are many
+solutions in the literature to solve the problem of priority inversion.
+In this lab, you will implement one such solution discussed in our
+lectures: <i>priority inheritance protocol for locks</i>. Other solutions, for example,
+can be found on <a href="https://en.wikipedia.org/wiki/Priority_inversion">Wikipedia</a>.
+</p>
+<p class="MsoNormal" style="font-weight: normal;">&nbsp; </p>
+</h3>
+<h1> <font size="5"><b>2. Interfaces to Implement</b></font> </h1>
+<h3 style="font-weight: normal;">
+<p class="MsoNormal"> <font size="4">Basic Locks</font> </p>
+<p class="MsoNormal"> <font size="4"><br>
+</font> </p>
+<p> For this lab you must implement the entire readers/writer lock
+system. This includes code or functions to:<br>
+</p>
+<p> <br>
+</p>
+<ul type="disc">
+  <li class="MsoNormal"> <span class="GramE">initialize</span> locks
+(call a function <font size="2"><span class="SpellE" style="font-family: Courier New;">linit</span><span style="font-family: Courier New;">()</span></font> from the <font size="2"><span class="SpellE" style="font-family: Courier New;">sysinit</span><span style="font-family: Courier New;">()</span></font> function in <font size="2"><span class="SpellE" style="font-family: Courier New;">initialize.c</span></font>)
+  </li>
+  <li class="MsoNormal"> <span class="GramE">create</span> and destroy
+a lock (<font size="2"><span class="SpellE" style="font-family: Courier New;">lcreate</span></font> and <font size="2"><span class="SpellE" style="font-family: Courier New;">ldelete</span></font>)
+  </li>
+  <li class="MsoNormal"> <span class="GramE">acquire</span> a lock and
+release multiple locks (<font size="2"><span style="font-family: Courier New;">lock</span></font> and <font size="2"><span class="SpellE" style="font-family: Courier New;">releaseall</span></font>)
+  </li>
+</ul>
+<p class="MsoNormal"> <br>
+</p>
+<p class="MsoNormal"> Please create files called <font style="color: rgb(0, 0, 0);" size="2"><span class="SpellE" style="font-family: Courier New;">linit.c</span><span style="font-family: Courier New;">, <span class="SpellE">lcreate.c</span>,
+<span class="SpellE">ldelete.c</span>, <span class="SpellE">lock.c</span>
+and <span class="SpellE">releaseall.c</span></span></font> that
+contain these functions. Use a header file called <font size="2"><span class="SpellE" style="color: rgb(0, 0, 0); font-family: Courier New;">lock.h</span></font>
+for your definitions, including the constants DELETED, READ and WRITE.
+The functions have to be implemented as explained next:<br>
+&nbsp; </p>
+<ul type="disc">
+  <li class="MsoNormal"> Create a lock:&nbsp; <font size="2"><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> <span class="SpellE">lcreate</span>
+(void)</span></font> - Creates a lock and returns a lock descriptor
+that can be used in further calls to refer to this lock. This call
+should return SYSERR if there are no available entries in the lock
+table. The number of locks allowed is NLOCKS, which you should define
+in <font size="2"><span class="SpellE" style="font-family: Courier New;">lock.h</span></font> to be 50. </li>
+  <li class="MsoNormal"> Destroy a lock: <font size="2"><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> <span class="SpellE">ldelete</span>
+(<span class="SpellE">int</span> <span class="SpellE">lockdescriptor</span>)</span></font>
+- Deletes the lock identified by the descriptor <font size="2"><span class="SpellE" style="font-family: Courier New;">lockdescriptor</span></font>.
+(<span class="GramE">see</span> "Lock Deletion" below) </li>
+  <li class="MsoNormal"> Acquisition of a lock for read/write: <font size="2"><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> lock (</span><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> ldes1, </span><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> type, </span><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> priority)</span></font> <span class="GramE">-&nbsp; This</span> call is explained below ("Wait on
+locks with Priority"). </li>
+  <li class="MsoNormal"> Simultaneous release of multiple locks: <font size="2"><span class="SpellE" style="font-family: Courier New;">int</span>
+    <span class="SpellE" style="font-family: Courier New;">releaseall</span><span style="font-family: Courier New;"> (</span><span class="SpellE" style="font-family: Courier New;">int</span> <span class="SpellE" style="font-family: Courier New;">numlocks</span><span style="font-family: Courier New;">, </span><span class="SpellE" style="font-family: Courier New;">int</span><span style="font-family: Courier New;"> ldes1</span><span class="GramE" style="font-family: Courier New;">,...,</span> <span class="SpellE" style="font-family: Courier New;">int</span> <span class="SpellE" style="font-family: Courier New;">ldesN</span><span style="font-family: Courier New;">)</span></font> </li>
+</ul>
+</h3>
+<br>
+<h3> <i>(1) Lock Deletion</i> </h3>
+<p class="MsoNormal"> As mentioned before, there is a slight problem
+with XINU semaphores. The way XINU handles <span class="SpellE"><i>sdelete</i></span>
+may have undesirable effects if a semaphore is deleted while a process
+or processes are waiting on it. Examining the code for wait and <span class="SpellE">sdelete</span>, you will notice that <span class="SpellE">sdelete</span> readies processes waiting on a semaphore
+being deleted. So they will return from wait with OK. </p>
+<p class="MsoNormal">&nbsp; </p>
+<p> You must implement your lock system such that waiting on a lock
+will return a new constant DELETED instead of OK when returning due to
+a deleted lock. This will indicate to the user that the lock was
+deleted and not unlocked. As before, any calls to <font size="2"><span class="GramE" style="font-family: Courier New;">lock(</span><span style="font-family: Courier New;">)</span></font> after the lock is
+deleted should return SYSERR. </p>
+<p>&nbsp; </p>
+<p> There is also another subtle but important point to note. Consider
+the following scenario. Let us say that there are three processes A, B,
+and C.&nbsp; Let A create a lock with <font size="2"><span style="font-family: Courier New;">descriptor=X</span></font>. <span class="GramE">Let&nbsp; A</span> and B use&nbsp; X to synchronize
+among themselves. Now, let us assume that A deletes the lock X. But B
+does not know about that. If, now, C tries to create a lock, there is a
+chance that it gets the same lock descriptor as that of X (lock
+descriptors are limited and hence can be reused). <span class="GramE">When
+B waits on X the next time, it should get a SYSERR.</span> It should
+not acquire the lock C has now newly created, even if this lock has the
+same id as that of the previous one. You have to find a way to
+implement this facility, in addition to the DELETED issue above. </p>
+<p>&nbsp; </p>
+<h3> <i>(2) Locking Policy</i> </h3>
+<p class="MsoNormal"> 
+
+In your implementation, no readers should be kept
+waiting unless (<span class="SpellE">i</span>) a writer has already
+obtained the lock, or (ii) there is a higher priority writer already
+waiting for the lock. Hence, when a writer or the last reader releases
+a lock, the lock should be next given to a process having the highest
+waiting priority for the lock. In the case of equal waiting priorities, 
+the lock will be given to the process that has the longest waiting time 
+(in milliseconds) on the lock. 
+If the waiting priorities are equal and the waiting time difference is 
+within 1 second, writers should be given preference to acquire the lock 
+over readers. 
+In any case, if a reader is chosen to have a lock, then all the other
+waiting readers having priority not less than that of the
+highest-priority waiting writer for the same lock should also be
+admitted. <br>
+
+
+</p><p class="MsoNormal">&nbsp; </p>
+<h3> <i>(3) Wait on Locks with Priority</i> </h3>
+<p class="MsoNormal"> This call allows a process to wait on a lock with
+priority. The call will have the form:<br>
+</p>
+<p class="MsoNormal"> <br>
+</p>
+<pre><font size="2"><span class="SpellE"><span class="GramE">&nbsp;&nbsp; &nbsp;int</span></span> lock (<span class="SpellE">int</span> ldes1, <span class="SpellE">int</span> type, <span class="SpellE">int</span> priority)</font><br><br></pre>
+<p> <span class="GramE">where</span> priority is any integer priority
+value (including negative values, positive values and zero).<br>
+</p>
+<p> <br>
+</p>
+<p> Thus when a process waits, it will be able to specify a wait
+priority. Rather than simply <span class="SpellE">enqueuing</span> the
+process at the end of the queue, the <font size="2"><span class="GramE" style="font-family: Courier New;">lock(</span><span style="font-family: Courier New;">)</span></font> call should now
+insert the process into the lock's wait list according to the wait
+priority. Please note that the wait priority is different from a
+process's scheduling priority specified in the <span class="GramE"><i>create(</i></span><i>..)</i>
+system call. A larger value of the priority parameter means a higher
+priority. </p>
+<p> Control is returned only when the process is able to acquire the
+lock. Otherwise, the calling process is blocked until the lock can be
+obtained.<br>
+</p>
+<p> <br>
+</p>
+<p> Acquiring a lock has the following meaning: </p>
+<p class="MsoNormal" style="margin-left: 0.5in;">
+1.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; The lock is free, i.e., no
+process <span class="GramE">is owning</span> it. In this case the
+process that requested the lock gets the lock and sets the type of
+locking as READ or WRITE. </p>
+<p class="MsoNormal" style="margin-left: 0.5in;">
+2.&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Lock is already acquired: </p>
+<p class="MsoNormal" style="margin-left: 1in;"> <span>a. For READ:</span><br>
+If the requesting process has specified the lock type as READ and has
+sufficiently high priority (not less than the highest priority writer
+process waiting for the lock), it acquires the lock, else not. </p>
+<p class="MsoNormal" style="margin-left: 1in;"> <span>b. For WRITE:</span><br>
+In this case, the requesting process does not get the <span class="GramE">lock</span> as WRITE locks are exclusive. </p>
+<p class="MsoNormal" style="margin-left: 1in;">&nbsp; </p>
+<h3> <i>(4) Releasing Locks</i> </h3>
+<p class="MsoNormal"> Simultaneous <i>release</i> allows a process to
+release one or more locks simultaneously. The system call has the form<br>
+</p>
+<p class="MsoNormal">&nbsp; </p>
+<pre><span class="SpellE"><span class="GramE">&nbsp;&nbsp; &nbsp;<font size="2">int</font></span></span><font size="2"> <span class="SpellE">releaseall</span> (<span class="SpellE">int</span> <span class="SpellE">numlocks</span>, <span class="SpellE">int</span> ldes1, ...)</font><br><br></pre>
+<p> <span class="GramE">and</span> should be defined according to the
+locking policy given above. Also, each of the lock descriptors must
+correspond to a lock being held by the calling process. <br>
+If there is a lock in the arguments which is not held by calling 
+process, 
+this function needs to return SYSERR and should not release this lock. 
+However, it will still release other locks which are held by the calling
+ process. <br>
+
+</p><h3> <i>(5) Using Variable Arguments</i> </h3>
+<p class="MsoNormal"> The call <font size="2"><span class="SpellE" style="font-family: Courier New;">releaseall</span><span style="font-family: Courier New;"> (</span><span class="SpellE" style="font-family: Courier New;">int</span> <span class="SpellE" style="font-family: Courier New;">numlocks</span><span class="GramE" style="font-family: Courier New;">,..</span><span style="font-family: Courier New;">)</span></font>, has a variable
+number of arguments. For instance, it could be:<br>
+</p>
+<pre style="margin-left: 0.5in;"><font size="2"><span class="SpellE"><span class="GramE">releaseall</span></span>(numlocks,ldes1, ldes2);</font></pre>
+<pre style="margin-left: 0.5in;"><font size="2"><span class="SpellE"><span class="GramE">releaseall</span></span>(numlocks,ldes1, ldes2, ldes3, ldes4);<br><br></font></pre>
+<p class="MsoNormal"> <span class="GramE">where</span> <span class="SpellE">numlocks</span> = 2 in the first case and <span class="SpellE">numlocks</span> = 4 in the second case. </p>
+<p> The first call releases two locks ldes1 and ldes2. The second
+releases four locks. You will not use the <span class="SpellE">va_list/va_arg</span>
+facilities to accommodate variable numbers of arguments, but will
+obtain the arguments directly from the stack. See <font size="2"><span class="SpellE" style="font-family: Courier New;">create.c</span></font>
+for hints on how to do this. </p>
+<p>&nbsp; </p>
+
+
+<h3> <font size="5">3. Priority Inheritance</font> </h3>
+
+<h2>Introduction</h2>
+
+
+<p class="MsoNormal" style="font-weight: normal;"> <i>Note:</i> The
+priority mentioned in this section is the process' scheduling priority
+and not the wait priority. The priority inheritance protocol solves the
+problem of priority inversion by increasing the priority of the low
+priority process holding the lock to the priority of the high priority
+process waiting on the lock. </p>
+<p class="MsoNormal" style="font-weight: normal;">&nbsp; </p>
+<p style="font-weight: normal;"> Basically, the following invariant
+must be maintained for all processes <i>p</i>:<br>
+<span class="GramE">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="SpellE">Prio</span></span>(<i>p</i>)
+= max (<span class="SpellE">Prio</span>(<i>p_i</i>)), &nbsp;&nbsp; for
+all processes <i>p_i</i> waiting on any of the locks held by process <i>p</i>.<br>
+<br>
+Furthermore, you also have to ensure the transitivity of priority
+inheritance. This scenario can be illustrated with the help of an
+example. Suppose there are three processes A, B, and C with priorities
+10, 20, and 30 respectively. Process A acquires a lock L1 and Process B
+acquires a lock L2. Process A then waits on the lock L2 and becomes
+ineligible for execution. If now process C waits on the lock L1, then
+the priorities of both the processes A and B should be raised to 30. </p>
+
+<h2>Priority Inheritance Implementation Hints</h2>
+
+<p class="MsoNormal"> These hints give a possible implementation of the
+priority inheritance protocol. You are free to come up with your own
+implementation as long as the functionality is correct.<br>
+</p>
+<p class="MsoNormal"> <br>
+</p>
+<p> You can maintain the following information: </p>
+<ul>
+  <li> &nbsp;&nbsp;Inside the process table entry: </li>
+</ul>
+<div style="margin-left: 80px;"> a) <span class="GramE">The</span>
+original priority (<span class="SpellE">pprio</span>) with which a
+process is created.<br>
+b) <span class="SpellE"><span class="GramE">pinh</span></span> - The
+current inherited priority of the process. This value can be 0 when the
+process is running with its original priority.<br>
+c) A bit mask or a linked list through which all the locks held by the
+process can be found.<br>
+d) An integer value <span class="SpellE">lockid</span> indicating the
+lock descriptor in whose wait queue the process is blocked. It can take
+the value -1 when the process is not blocked inside any wait queue.
+Note that a process can be only inside a single wait queue at a time. </div>
+<ul>
+  <li> Inside the lock descriptor table entry. </li>
+</ul>
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;a) A priority field (<span class="SpellE">lprio</span>)
+indicating the maximum priority among all the processes waiting in the
+lock's wait queue.<br>
+&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;
+&nbsp;&nbsp;&nbsp; &nbsp;b) A linked list/bitmask of the process ids of
+the processes currently holding the lock.
+<p class="MsoNormal" style="margin-left: 0.9134in;"> <br>
+</p>
+<p class="MsoNormal"> The actions to be performed in the following
+situations are: </p>
+<ul>
+  <li> <span style="font-family: Symbol;"><font size="2">&nbsp;</font></span><span class="GramE">lock</span>: Suppose that the process P1 requests a
+lock. If the lock is available, then nothing needs to be done.
+Otherwise, if the priority of the process (P2) holding the lock is no
+less than the priority of P1, then also nothing has to be done.
+Otherwise the priority of P2 (<span class="SpellE">pinh</span>) has to
+be ramped up to the priority of P1 (<span class="SpellE">pinh</span> if
+    <span class="SpellE"><span class="GramE">pinh</span></span><span class="GramE"> !=</span> 0;pprio otherwise). Note that whenever we
+refer to the priority of a process, we refer to the <span class="SpellE">pinh</span> field if it is non-zero<span class="GramE">;</span>
+    <span class="SpellE">pprio </span>otherwise. After ramping up the
+priority of P1, we also have to take care of the transitivity of
+priority inheritance as discussed earlier. </li>
+</ul>
+<ul>
+  <li> <span style="font-family: Symbol;"><font size="2">&nbsp;</font></span>Release:
+On releasing a lock, the priority of the process has to be reset to the
+maximum priority of all the processes in the wait queues of all the
+locks <i>still </i>held by the process. The bitmask/linked list field
+in the process table entry can be used for this purpose. Note that <span class="GramE">multiple locks can be released by a process</span>. </li>
+  <li> <span class="SpellE"><span class="GramE">chprio</span></span>,
+kill, etc: These system calls can also have a side effect. If a process
+P1, in the wait queue of a lock L has its priority changed or is
+killed, we need to recalculate the maximum priority of all the
+processes in L's wait queue, and update the priority of the processes
+holding L too, if necessary. </li>
+</ul>
+<p class="MsoNormal" style="margin-left: 0.5in;">&nbsp; </p>
+<p> This is a basic outline, but feel free to modify/improve upon this
+scheme. Questions should be posted to the message board. </p>
+<p> You are provided with a code example in the file <a href="https://people.engr.ncsu.edu/gjin2/Classes/501/Fall2017/assignments/PA3/test_main.c">test_main.c
+</a> </p>
+<p>&nbsp; </p>
+
+
+<h3><font size="5">4. Additional Tasks</font></h3> 
+ 
+<p>Write your answers to the following questions in a file named Lab3Answers.txt(in simple text).</p>
+<p>Please place this file in the TMP/ directory and turn it in, along with the above programming assignment.</p>
+ 
+<ol>
+
+<li>The priority inversion problem could cause that a higher-priority 
+process needs to wait for the completion of a lower-priority process.
+  <ol>
+    <li>Priority inheritance is one approach to address this issue.  Please give another approach and briefly describe its idea.</li>
+    <!--
+    <li>Describe how you implement the priority inheritance protocol.  Please list the files that you modified or added for the implemention.  Besides, you should explain why you made those modifications.</li>
+    -->
+    <li>Design a test case to show that your approach can address the 
+priority inversion problem.  You should compare the results that derived
+ from the original XINU implementation (use semaphore) and that derived 
+from your implementation (use readers/writer locks). Put your results in
+ Lab3Answers.txt and your test case program (name it task1.c) in both 
+./sys and ./TMP</li>
+  </ol>
+</li>
+
+<li>Synchronization is a quite complex issue in operating systems.  To 
+show your understanding about process synchronization, you are asked to 
+point out a reader/writer synchronization issue in this pesudo-code: <a href="https://people.engr.ncsu.edu/gjin2/Classes/501/Fall2017/assignments/PA3/task2_sync_issue.c">task2_sync_issue.c</a>. 
+Multiple reader threads can execute this code concurrently by calling <span style="font-family: Courier New;">do_update</span>. All the variables starting with <span style="font-family: Courier New;">global_</span>
+ are global variables. 
+You are asked to describe the potential issue caused by the incorrect 
+synchronization and point out at least one possible thread interleaving 
+that would trigger the problem. 
+Put your answer in Lab3Answers.txt mentioned above.
+
+</li>
+
+</ol>
+
+<h3> <font size="5">Turn-in Instructions</font>
+<p style="font-weight: normal;"> <i>Electronic turn-in instructions</i>
+</p><p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="SpellE">i</span>)
+<span class="GramE">go</span> to the <font size="2"><span style="font-family: Courier New;">csc501-lab3/compile</span></font>
+directory and do "<font size="2"><span style="font-family: Courier New;">make
+clean</span></font>". </p>
+<p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ii) <span class="GramE">go</span>
+to the directory of which your <font size="2"><span style="font-family: Courier New;">csc501-lab3</span></font> directory
+is a subdirectory (NOTE: please do not rename <font size="2"><span style="font-family: Courier New;">csc501-lab3</span></font>, or any of
+its subdirectories.) </p>
+<p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<span class="GramE">e</span>.g., if <font size="2"><span style="font-family: Courier New;">/home/csc501/csc501-lab3</span></font>
+is your directory structure, <span class="SpellE">goto</span> <font size="2"><span style="font-family: Courier New;">/homes/csc501</span></font>
+</p>
+<p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; iii) <span class="GramE">create</span>
+a subdirectory TMP (under the directory <font size="2"><span style="font-family: Courier New;">csc501-lab3</span></font>) and copy
+all the files you have modified/written, both .c files and .h files
+into the directory. </p>
+<p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; iv) <span class="GramE">compress</span>
+the <font size="2"><span style="font-family: Courier New;">csc501-lab3
+</span></font>directory into a <span class="SpellE">tgz</span> file
+and upload it to Moodle. Please
+only upload one <span class="SpellE">tgz</span> file. </p>
+<p style="font-weight: normal;">
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<font size="2"><span class="GramE" style="font-family: Courier New;">tar</span>
+<span class="SpellE" style="font-family: Courier New;">czf</span><span style="font-family: Courier New;"> csc501-lab3.tgz csc501-lab3</span></font>
+</p>
+<p style="font-weight: normal;"> Also, please remember that you are
+allowed and encouraged to share <span class="SpellE">testcases</span>
+on the message board. </p>
+<span style="color: red;">Make sure that your code compiles, debugging 
+output are turned off, turn-in instructions are followed precisely. 
+Verify your files
+submitted as no exceptions <span class="GramE">will</span> be made for
+accidentally submitted wrong files. Submitting file with wrong format or
+ wrong name will be treated as "source code can not be compiled".</span> <p></p>
+</h3>
+
+<h3><font size="5">Grading Policy</font></h3>
+<ul>
+  <li>(10%) Source code can be compiled and the generated image is bootable</li>
+  <li>(60%) All test cases worth 60 points (it might include 8-12 test cases)</li>
+  <li>(30%) Each additional question earns 15 points</li>  
+</ul>
+
+
+</div></div></body></html>

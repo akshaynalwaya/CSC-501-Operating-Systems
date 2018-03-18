@@ -1,0 +1,67 @@
+1. The priority inversion problem could cause that a higher-priority process needs to wait for the completion of a lower-priority  process.
+
+1.1 Priority inheritance is one approach to address this issue. Please give another approach and briefly describe its idea.
+Ans.
+There are some approaches that can be used for addressing the problem of priority inversion. 
+
+1. Avoid Blocking:
+When a higher priority process is waiting because a lower priority process is currently executing, it is called prioirty inversion. To handle this situation, one solution is to avoid blocking.
+When a process/thread is blokced, it is basically dormant and is not contributing anything. If such a process happends to be a high-prioirty process then this case should be strictly avoided. In avoid blocking approach, high priority processes are not allowed to be blocked by the lower priority processes. This is done by making changes on copies (called shadow copies) and then swapping them once the operation is completed. This swapping is atomic in nature and hence consistency is not a problem. This approach is also called copy-on-update.
+
+2. PRIORIRTY CEILING:
+This approach is particularly used in shared resources where priority inversion and deadlocks (due to improper use of critical sections) are to be avoided. It dynamically increases the priority of processes under consideration when some condition is met. In this case, the priority assigned to the process is the highest priority among the processes using the lock. This approach requires that the new priority (ceiling priority) is the highest and no other process has a prioirty higher than this value.
+
+[Ref.: https://en.wikipedia.org/wiki/Priority_inversion#Solutions
+       https://en.wikipedia.org/wiki/Non-blocking_algorithm 
+       https://en.wikipedia.org/wiki/Priority_ceiling_protocol ]
+
+
+1.2 Design a test case to show that your approach can address the priority inversion problem. You should compare the results that derived from the original XINU implementation (use semaphore) and that derived from your implementation (use readers/writer locks). Put your results in Lab3Answers.txt and your test case program (name it task1.c) in both ./sys and ./TMP
+Ans.
+
+Let's take a case where we have three processes A, B and C and priorities are in the order A<B<C.
+Now when we use semaphore for these processes, A gets scheduled first and enters the critical section. Now while it is sleeping, process B gets scheduled and it starts execution. Now, process C (although being a high priority process) has to wait untill A and B have completed their execution. This is the problem of priority inversion which is present in original XINU implementation (using semaphores).
+In the modified approach of readers/writers lock used for this project, in the same scenario, process A starts execution but when it sees that process C has higher priority, its priority is increased and then it goes to sleep. Now B gets to run and runs for somtime will C is not encountered. Now C gets to run as it has higher priority than B, so now B gets to complete its remaining task only when C has completed its execution.
+This is evident from the output of task1.c shown below.
+
+OUTPUT task1.c:
+
+Testing using semaphore.
+Starting A.
+A
+A: in CS
+Starting B.
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+A: moving outside CS.
+Starting C.
+C
+C: in CS
+C: moving outside CS.
+
+Testing using reader/writer locks with priority inversion.
+Starting A.
+A
+A: Lock acquired.
+Starting B.
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+A: Releasing lock.
+Starting C.
+C
+C: Lock acquired
+C: Releasing lock
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+
+
+2. Synchronization is a quite complex issue in operating systems. To show your understanding about process synchronization, you are asked to point out a reader/writer synchronization issue in this pesudo-code: task2_sync_issue.c. Multiple reader threads can execute this code concurrently by calling do_update. All the variables starting with global_ are global variables. You are asked to describe the potential issue caused by the incorrect synchronization and point out at least one possible thread interleaving that would trigger the problem. Put your answer in Lab3Answers.txt mentioned above.
+Ans.
+There are some points which need to be noted:
+- It's a reader process, and readers are allowed to have concurrent accesses
+- Multiple readers can acqurie lock, therefore can enter and use the do_update() function.
+
+Using these, there can be a possible scenario like,
+One process acquires the read lock and performs some write operations.
+Another process acquires the lock at the same time, since read locks are not exclusive, and now this process also modifies the data value.
+In such a case, multiple processes are performing write opertion which is not exclusive, and hence it leads to inconsistency in the data value.
+
+This is a potential issue in the given pesudo-code.
