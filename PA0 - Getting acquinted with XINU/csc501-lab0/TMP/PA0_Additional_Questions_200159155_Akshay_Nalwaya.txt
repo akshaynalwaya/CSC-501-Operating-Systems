@@ -1,0 +1,95 @@
+OPERATING SYSTEMS: CSC 501 (001)
+PA0: ADDITIONAL QUESTIONS
+
+/*Name    : Akshay Nalwaya
+* Unity ID: 200159155
+*/
+
+1. Assuming the XINU text begins at address 0x0, draw a rough diagram of XINU's memory layout with addresses derived from your experimental measurements. Include the information you uncovered from running your version of printsegaddress() and printprocstks().
+
+Ans.	
+
+XINU MEMORY LAYOUT
+
+|  Free	 | 
+|________|__ base pointer (stack base)= 0x00ffeff8
+|	 |
+|	 |   stack pointer = 0x001f6f4
+| Stack	 |
+|	 |   stack size = 0x00001000 (4096)
+|	 |    
+|________|__ stack limit = 0x00ffdffc
+|	 |
+|  Heap	 |
+|	 |
+|________|__ ebss = 0x00026cf8
+|	 |
+|  End	 |
+| (bss)	 |
+|________|__ edata = 0x0001e680
+|  Data	 |
+|(edata) |
+|________|__ etext = 0x00019477
+|  Text	 |
+|(etext) |
+|________|___Start = 0x0
+
+
+2. What is the difference in stack top address before and after calling printtos() ? Draw a diagram to illustrate what are the contents of the items pushed into the stack between these two time points.
+
+Ans. Once the printtos() function is called, values stored in return address and the base pointer of main are pushed onto the stack. These values are stored in the instruction pointer (eip) register.
+ ________
+|	 |
+|	 |--> after printtos() call = 0x00ffefec
+|  ebp	 |
+|________|
+|	 |
+| return |--> before printtos() call = 0x00ffefe4
+| address|		
+|________|
+
+
+3. Which byte order is adopted in the host machine that we are using ? How did you find out ?
+
+Ans. Little Endian
+It can be found using the command: 
+	lscpu | grep Endian
+
+Output of this command:
+	Byte Order:	Little Endian
+
+'lscpu' gathers information about CPU architecture from various libraries (like sysfs, /proc/cpuinfo). It has an attribute called "Byte Order" which stores the type of byte order used by the system. After this 'grep' uses the output from 'lscpu' command and searches for the string 'Endian' in it.
+
+
+4. Briefly describe the mov, push, pusha, pop, and popa instructions in the x86.
+Ans. 
+
+a) mov: This is move instruction. It copies the data from second operand into the first operand. 
+It's syntax is - mov <a>,<b>  
+where <a> can be a register or memory and <b> can be register, memory or constant. 
+
+b) push: This is push instruction. It pushes the value of operand on top the stack memory. Firstly, it will decrement the esp (stack pointer) by 4  and then place the operand on memory location at esp. 
+It's syntax is push <a>
+where <a> can be a memory, 32-bit register or 32-bit constant.
+
+c) pusha: This is push all instruction. This instruction is used when the size of operand is 16. The order in which registers are stored on the stack is - AX, CX, DX, BX, SP (original value), BP, SI, and DI.
+
+d) pop: This is pop instruction. It pops the value from top of memory stack into the operand specified in instruction. Firstly, it moves 4 bytes into the memory location and then increments the value of top of stack by 4.
+It's syntax is pop <a>.
+where <a> can be register or memory location.
+
+e) popa: This is pop all instruction. It pops words from the stack into general-purpose registers and is used when the size of operand is 16. The registers are loaded in the order -  DI, SI, BP, BX, DX, CX, and AX.
+
+
+5. In a stack frame, local variables are stored below the top of the stack. In task 3, does your result show all the local variables declared in your printtos function? If not, can you explain that? (hint: try to disable the compiler optimization by specifying -O0 in your Makefile)
+
+Ans.
+No, the result of task 3 doesn't show all the variables declared in the printtos() function.
+The goal of compiler is to decrease the cost of compilation while ensuring that debugging produce the expected results. So, compiler performs optimization tasks based on its knowledge of the program and this is the reason why printtos() function execution doesn't show all the variables. Also, by specifying -O0 in the Makefile we disable this optimization operation and hence they are now stored below the top of stack.
+
+
+[ Links used for reference:
+- https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
+- http://x86.renejeschke.de/html/file_module_x86_id_249.html
+- http://www.cs.virginia.edu/~evans/cs216/guides/x86.html 
+- http://makepp.sourceforge.net/1.19/makepp_tutorial.html ]
